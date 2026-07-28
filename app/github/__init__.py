@@ -1,0 +1,2 @@
+"""GitHub integration boundary."""
+

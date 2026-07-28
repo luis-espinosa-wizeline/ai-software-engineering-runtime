@@ -1,0 +1,308 @@
+# FILE: app/shared/models.py
+"""Shared primitives used by the Runtime domain."""
+
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type Metadata = dict[str, JsonValue]
+
+type RuntimeId = UUID
+type WorkflowId = str
+type CapabilityId = str
+
+
+class DomainModel(BaseModel):
+    """Base for immutable, strictly shaped domain values."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+# FILE: app/runtime/models.py
+"""Top-level Runtime and trigger domain models."""
+
+from datetime import datetime
+from uuid import uuid4
+
+from pydantic import Field
+
+from app.shared import DomainModel, JsonValue, Metadata, RuntimeId
+
+
+class Runtime(DomainModel):
+    """Identity and descriptive information for a Runtime installation."""
+
+    name: str
+    version: str
+    runtime_id: RuntimeId = Field(default_factory=uuid4)
+    metadata: Metadata = Field(default_factory=dict)
+
+
+class TriggerMetadata(DomainModel):
+    """Provider-neutral facts describing a trigger source."""
+
+    source: str
+    event_type: str
+    subject: str | None = None
+    attributes: Metadata = Field(default_factory=dict)
+
+
+class Trigger(DomainModel):
+    """A configured source capable of initiating runtime work."""
+
+    name: str
+    kind: str
+    trigger_id: RuntimeId = Field(default_factory=uuid4)
+    description: str | None = None
+    metadata: Metadata = Field(default_factory=dict)
+
+
+class TriggerEvent(DomainModel):
+    """An occurrence emitted by a trigger."""
+
+    trigger: Trigger
+    metadata: TriggerMetadata
+    event_id: RuntimeId = Field(default_factory=uuid4)
+    occurred_at: datetime
+    payload: dict[str, JsonValue] = Field(default_factory=dict)
+
+# FILE: app/workflows/models.py
+"""Workflow definition, request, and result models."""
+
+from datetime import datetime
+
+from pydantic import Field
+
+from app.shared import CapabilityId, DomainModel, JsonValue, Metadata, WorkflowId
+
+
+class WorkflowDefinition(DomainModel):
+    """The versioned description of a workflow the Runtime can execute."""
+
+    workflow_id: WorkflowId
+    name: str
+    version: str
+    description: str | None = None
+    required_capabilities: tuple[CapabilityId, ...] = ()
+    metadata: Metadata = Field(default_factory=dict)
+
+
+class WorkflowRequest(DomainModel):
+    """Inputs supplied for one execution of a workflow."""
+
+    inputs: dict[str, JsonValue] = Field(default_factory=dict)
+    requested_at: datetime
+    requested_by: str | None = None
+    correlation_id: str | None = None
+
+
+class WorkflowResult(DomainModel):
+    """The final, provider-neutral output of a workflow execution."""
+
+    outputs: dict[str, JsonValue] = Field(default_factory=dict)
+    summary: str | None = None
+    artifacts: tuple[str, ...] = ()
+    metadata: Metadata = Field(default_factory=dict)
+
+# FILE: app/execution/models.py
+"""Workflow execution aggregate and supporting values."""
+
+from datetime import datetime
+from enum import StrEnum
+from uuid import uuid4
+
+from pydantic import Field
+
+from app.capabilities import CapabilityRequest, CapabilityResult
+from app.policy import PolicyDecision
+from app.runtime import TriggerEvent
+from app.shared import DomainModel, JsonValue, Metadata, RuntimeId
+from app.workflows import WorkflowDefinition, WorkflowRequest, WorkflowResult
+
+
+class WorkflowStatus(StrEnum):
+    """Lifecycle state of a workflow execution."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ExecutionStepStatus(StrEnum):
+    """Lifecycle state of an individual execution step."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class ExecutionContext(DomainModel):
+    """Data available to a workflow for the duration of one execution."""
+
+    trigger_event: TriggerEvent
+    values: dict[str, JsonValue] = Field(default_factory=dict)
+    metadata: Metadata = Field(default_factory=dict)
+
+
+class ExecutionStep(DomainModel):
+    """An observable unit of progress within a workflow execution."""
+
+    name: str
+    status: ExecutionStepStatus
+    step_id: RuntimeId = Field(default_factory=uuid4)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    details: Metadata = Field(default_factory=dict)
+    error: str | None = None
+
+
+class WorkflowExecution(DomainModel):
+    """Aggregate root representing one complete workflow lifecycle."""
+
+    definition: WorkflowDefinition
+    request: WorkflowRequest
+    context: ExecutionContext
+    status: WorkflowStatus = WorkflowStatus.PENDING
+    execution_id: RuntimeId = Field(default_factory=uuid4)
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    steps: tuple[ExecutionStep, ...] = ()
+    capability_requests: tuple[CapabilityRequest, ...] = ()
+    capability_results: tuple[CapabilityResult, ...] = ()
+    policy_decisions: tuple[PolicyDecision, ...] = ()
+    result: WorkflowResult | None = None
+    metadata: Metadata = Field(default_factory=dict)
+
+# FILE: app/capabilities/models.py
+"""Provider-agnostic capability request and result models."""
+
+from datetime import datetime
+from enum import StrEnum
+from uuid import uuid4
+
+from pydantic import Field
+
+from app.shared import CapabilityId, DomainModel, JsonValue, Metadata, RuntimeId
+
+
+class CapabilityStatus(StrEnum):
+    """Outcome state of a capability invocation."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class CapabilityMetadata(DomainModel):
+    """Observable facts about a capability invocation."""
+
+    provider: str | None = None
+    model: str | None = None
+    duration_ms: int | None = None
+    attributes: Metadata = Field(default_factory=dict)
+
+
+class CapabilityRequest(DomainModel):
+    """A workflow's provider-neutral request for a capability."""
+
+    capability_id: CapabilityId
+    inputs: dict[str, JsonValue] = Field(default_factory=dict)
+    request_id: RuntimeId = Field(default_factory=uuid4)
+    requested_at: datetime
+    metadata: Metadata = Field(default_factory=dict)
+
+
+class CapabilityResult(DomainModel):
+    """The recorded result of fulfilling a capability request."""
+
+    request_id: RuntimeId
+    status: CapabilityStatus
+    completed_at: datetime
+    outputs: dict[str, JsonValue] = Field(default_factory=dict)
+    error: str | None = None
+    metadata: CapabilityMetadata = Field(default_factory=CapabilityMetadata)
+
+# FILE: app/policy/models.py
+"""Policy evaluation domain models."""
+
+from datetime import datetime
+from enum import StrEnum
+from uuid import uuid4
+
+from pydantic import Field
+
+from app.shared import DomainModel, Metadata, RuntimeId
+
+
+class PolicyOutcome(StrEnum):
+    """The disposition produced by a policy evaluation."""
+
+    ALLOW = "allow"
+    DENY = "deny"
+    REQUIRE_REVIEW = "require_review"
+
+
+class PolicyViolation(DomainModel):
+    """A concrete policy constraint that was not satisfied."""
+
+    policy_id: str
+    message: str
+    code: str | None = None
+    path: str | None = None
+    metadata: Metadata = Field(default_factory=dict)
+
+
+class PolicyDecision(DomainModel):
+    """An observable policy evaluation made during an execution."""
+
+    policy_id: str
+    outcome: PolicyOutcome
+    evaluated_at: datetime
+    decision_id: RuntimeId = Field(default_factory=uuid4)
+    reason: str | None = None
+    violations: tuple[PolicyViolation, ...] = ()
+    metadata: Metadata = Field(default_factory=dict)
+
+# FILE: app/publishing/models.py
+"""Result publication domain models."""
+
+from datetime import datetime
+from enum import StrEnum
+from uuid import uuid4
+
+from pydantic import Field
+
+from app.shared import DomainModel, JsonValue, Metadata, RuntimeId
+
+
+class PublicationStatus(StrEnum):
+    """Outcome state of a publication attempt."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class PublicationRequest(DomainModel):
+    """A provider-neutral request to publish a workflow result."""
+
+    execution_id: RuntimeId
+    destination: str
+    content: dict[str, JsonValue] = Field(default_factory=dict)
+    request_id: RuntimeId = Field(default_factory=uuid4)
+    requested_at: datetime
+    metadata: Metadata = Field(default_factory=dict)
+
+
+class PublicationResult(DomainModel):
+    """The recorded outcome of a publication request."""
+
+    request_id: RuntimeId
+    status: PublicationStatus
+    completed_at: datetime
+    external_reference: str | None = None
+    error: str | None = None
+    metadata: Metadata = Field(default_factory=dict)
