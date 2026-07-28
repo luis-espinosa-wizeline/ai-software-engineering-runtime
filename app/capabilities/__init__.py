@@ -1,15 +1,26 @@
 """Capability domain."""
 
+from app.capabilities.artifact import Artifact
+from app.capabilities.errors import (
+    CapabilityResolutionError,
+    DuplicateCapability,
+    MissingCapability,
+)
 from app.capabilities.models import (
-    CapabilityMetadata,
+    Capability,
     CapabilityRequest,
     CapabilityResult,
-    CapabilityStatus,
 )
+from app.capabilities.resolver import CapabilityResolver, InMemoryCapabilityResolver
 
 __all__ = [
-    "CapabilityMetadata",
+    "Artifact",
+    "Capability",
     "CapabilityRequest",
+    "CapabilityResolutionError",
+    "CapabilityResolver",
     "CapabilityResult",
-    "CapabilityStatus",
+    "DuplicateCapability",
+    "InMemoryCapabilityResolver",
+    "MissingCapability",
 ]

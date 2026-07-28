@@ -1,12 +1,24 @@
 """Workflow execution domain."""
 
+from app.capabilities import Artifact
+from app.execution.context import ExecutionContext
+from app.execution.engine import ExecutionEngine
 from app.execution.errors import (
+    ArtifactAlreadyStored,
+    ArtifactNotFound,
+    CapabilityContractMismatch,
+    ExecutionContextError,
+    ExecutionContextPlanMismatch,
+    ExecutionEngineError,
     InvalidLifecycleTimestamp,
     InvalidStepTransition,
     InvalidWorkflowSteps,
     InvalidWorkflowTransition,
+    MissingRequiredArtifact,
+    MissingRequiredInput,
     UnknownWorkflowStep,
     WorkflowLifecycleError,
+    WorkflowResultNotFound,
 )
 from app.execution.lifecycle import (
     cancel_execution,
@@ -19,23 +31,59 @@ from app.execution.lifecycle import (
     start_step,
 )
 from app.execution.models import (
-    ExecutionContext,
     ExecutionStepStatus,
     WorkflowExecution,
     WorkflowStatus,
     WorkflowStepExecution,
 )
+from app.execution.plan import (
+    ExecutionPlan,
+    ExecutionPlanStep,
+    InputBinding,
+    PlanInputReference,
+    PlanResultReference,
+    StepOutputReference,
+)
+from app.execution.planner import (
+    ExecutionPlanConstructionError,
+    ExecutionPlanner,
+    ExecutionPlannerError,
+    InvalidWorkflowForPlanning,
+    WorkflowSemanticError,
+)
 
 __all__ = [
+    "Artifact",
+    "ArtifactAlreadyStored",
+    "ArtifactNotFound",
+    "CapabilityContractMismatch",
     "ExecutionContext",
+    "ExecutionContextError",
+    "ExecutionContextPlanMismatch",
+    "ExecutionEngine",
+    "ExecutionEngineError",
+    "ExecutionPlan",
+    "ExecutionPlanConstructionError",
+    "ExecutionPlanStep",
+    "ExecutionPlanner",
+    "ExecutionPlannerError",
     "ExecutionStepStatus",
+    "InputBinding",
     "InvalidLifecycleTimestamp",
     "InvalidStepTransition",
     "InvalidWorkflowSteps",
     "InvalidWorkflowTransition",
+    "InvalidWorkflowForPlanning",
+    "MissingRequiredArtifact",
+    "MissingRequiredInput",
+    "PlanInputReference",
+    "PlanResultReference",
+    "StepOutputReference",
     "UnknownWorkflowStep",
     "WorkflowExecution",
     "WorkflowLifecycleError",
+    "WorkflowResultNotFound",
+    "WorkflowSemanticError",
     "WorkflowStepExecution",
     "WorkflowStatus",
     "cancel_execution",

@@ -6,11 +6,10 @@ from uuid import uuid4
 
 from pydantic import Field, model_validator
 
-from app.capabilities import CapabilityRequest, CapabilityResult
+from app.execution.context import ExecutionContext
 from app.execution.errors import InvalidWorkflowSteps
 from app.policy import PolicyDecision
-from app.runtime import TriggerEvent
-from app.shared import DomainModel, JsonValue, Metadata, RuntimeId, WorkflowStepId
+from app.shared import DomainModel, Metadata, RuntimeId, WorkflowStepId
 from app.workflows import WorkflowDefinition, WorkflowRequest, WorkflowResult
 
 
@@ -32,14 +31,6 @@ class ExecutionStepStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED = "skipped"
-
-
-class ExecutionContext(DomainModel):
-    """Data available to a workflow for the duration of one execution."""
-
-    trigger_event: TriggerEvent | None = None
-    values: dict[str, JsonValue] = Field(default_factory=dict)
-    metadata: Metadata = Field(default_factory=dict)
 
 
 class WorkflowStepExecution(DomainModel):
@@ -65,8 +56,6 @@ class WorkflowExecution(DomainModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     steps: tuple[WorkflowStepExecution, ...] = ()
-    capability_requests: tuple[CapabilityRequest, ...] = ()
-    capability_results: tuple[CapabilityResult, ...] = ()
     policy_decisions: tuple[PolicyDecision, ...] = ()
     result: WorkflowResult | None = None
     error: str | None = None

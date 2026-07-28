@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -10,17 +11,13 @@ from app.execution import (
     WorkflowStatus,
     WorkflowStepExecution,
 )
-from app.runtime import Trigger, TriggerEvent, TriggerMetadata
+from app.runtime import Trigger
 from app.workflows import WorkflowDefinition, WorkflowRequest, WorkflowStepDefinition
 
 
 def test_workflow_execution_exposes_the_runtime_aggregate() -> None:
     now = datetime.now(UTC)
-    event = TriggerEvent(
-        trigger=Trigger(name="manual", kind="manual"),
-        metadata=TriggerMetadata(source="test", event_type="requested"),
-        occurred_at=now,
-    )
+    execution_id = UUID("00000000-0000-0000-0000-000000000001")
     execution = WorkflowExecution(
         definition=WorkflowDefinition(
             workflow_id="code-review",
@@ -37,9 +34,11 @@ def test_workflow_execution_exposes_the_runtime_aggregate() -> None:
         ),
         request=WorkflowRequest(requested_at=now, correlation_id="change-42"),
         context=ExecutionContext(
-            trigger_event=event,
-            values={"repository": "example/runtime"},
+            execution_id=execution_id,
+            plan_id="code-review.1",
+            inputs={"repository": "example/runtime"},
         ),
+        execution_id=execution_id,
         created_at=now,
         steps=(
             WorkflowStepExecution(
@@ -50,17 +49,21 @@ def test_workflow_execution_exposes_the_runtime_aggregate() -> None:
     )
 
     assert execution.status is WorkflowStatus.PENDING
-    assert execution.context.trigger_event == event
-    assert execution.context.values == {"repository": "example/runtime"}
+    assert execution.context.plan_id == "code-review.1"
+    assert execution.context.inputs == {"repository": "example/runtime"}
     assert execution.definition.required_capabilities == ("review-code",)
     assert execution.definition.steps[0].name == "Review change"
     assert execution.steps[0].step_id == execution.definition.steps[0].step_id
 
 
-def test_execution_context_does_not_require_a_trigger_event() -> None:
-    context = ExecutionContext(values={"source": "scheduled"})
+def test_execution_context_stores_execution_inputs() -> None:
+    context = ExecutionContext(
+        execution_id=UUID("00000000-0000-0000-0000-000000000001"),
+        plan_id="code-review.1",
+        inputs={"source": "scheduled"},
+    )
 
-    assert context.trigger_event is None
+    assert context.inputs == {"source": "scheduled"}
 
 
 def test_domain_models_are_immutable_and_reject_unknown_fields() -> None:

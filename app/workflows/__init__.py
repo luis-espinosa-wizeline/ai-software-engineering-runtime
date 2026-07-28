@@ -10,9 +10,13 @@ from app.workflows.errors import (
 )
 from app.workflows.models import (
     WorkflowDefinition,
+    WorkflowInputBinding,
+    WorkflowInputReference,
     WorkflowRequest,
     WorkflowResult,
+    WorkflowResultReference,
     WorkflowStepDefinition,
+    WorkflowStepOutputReference,
 )
 from app.workflows.registry import WorkflowRegistry
 
@@ -23,10 +27,14 @@ __all__ = [
     "InvalidWorkflowDefinition",
     "WorkflowDefinition",
     "WorkflowDiscovery",
+    "WorkflowInputBinding",
+    "WorkflowInputReference",
     "WorkflowNotFound",
     "WorkflowRegistry",
     "WorkflowRegistryError",
     "WorkflowRequest",
     "WorkflowResult",
+    "WorkflowResultReference",
     "WorkflowStepDefinition",
+    "WorkflowStepOutputReference",
 ]

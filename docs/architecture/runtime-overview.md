@@ -22,7 +22,7 @@ A workflow is a product-level process coordinated by the Runtime. The first supp
 
 ### Capability
 
-A capability is an abstract operation a workflow can request without depending on a provider implementation.
+A capability is an executable implementation of a provider-neutral Action Contract. It receives a fully resolved CapabilityRequest and returns artifacts in a CapabilityResult.
 
 ### Provider
 
@@ -38,7 +38,7 @@ Context is the repository, event, and workflow data prepared for a workflow exec
 
 ### Execution
 
-Execution is the controlled process and environment used to perform workflow work safely and repeatably.
+Execution is the deterministic sequential coordination of an ExecutionPlan. The ExecutionEngine resolves bindings, invokes capabilities through execution contracts, stores their artifacts in the ExecutionContext, and returns the plan's declared result.
 
 ### Publisher
 
@@ -64,5 +64,4 @@ flowchart TD
 
 ## Current Scope
 
-This repository currently contains only the foundation for the Runtime. It intentionally does not implement the workflow engine, capability provider contracts, GitHub integration, policy logic, execution sandboxing, or publishing behavior yet.
-
+This repository implements deterministic sequential plan execution but intentionally does not implement parallelism, retries, scheduling, provider integrations, GitHub integration, policy logic, execution sandboxing, persistence, telemetry, or publishing behavior.

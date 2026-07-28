@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 
@@ -32,6 +33,14 @@ from app.workflows import (
 CREATED_AT = datetime(2026, 1, 1, 12, tzinfo=UTC)
 STARTED_AT = CREATED_AT + timedelta(minutes=1)
 COMPLETED_AT = STARTED_AT + timedelta(minutes=1)
+EXECUTION_ID = UUID("00000000-0000-0000-0000-000000000001")
+
+
+def make_context() -> ExecutionContext:
+    return ExecutionContext(
+        execution_id=EXECUTION_ID,
+        plan_id="code-review.1",
+    )
 
 
 def make_execution() -> WorkflowExecution:
@@ -46,7 +55,8 @@ def make_execution() -> WorkflowExecution:
             ),
         ),
         request=WorkflowRequest(requested_at=CREATED_AT),
-        context=ExecutionContext(),
+        context=make_context(),
+        execution_id=EXECUTION_ID,
         created_at=CREATED_AT,
     )
 
@@ -84,7 +94,8 @@ def test_creation_rejects_duplicate_or_mismatched_step_identifiers() -> None:
         WorkflowExecution(
             definition=duplicate_definition,
             request=WorkflowRequest(requested_at=CREATED_AT),
-            context=ExecutionContext(),
+            context=make_context(),
+            execution_id=EXECUTION_ID,
             created_at=CREATED_AT,
         )
 
@@ -93,7 +104,8 @@ def test_creation_rejects_duplicate_or_mismatched_step_identifiers() -> None:
         WorkflowExecution(
             definition=definition,
             request=WorkflowRequest(requested_at=CREATED_AT),
-            context=ExecutionContext(),
+            context=make_context(),
+            execution_id=EXECUTION_ID,
             created_at=CREATED_AT,
             steps=(
                 WorkflowStepExecution(

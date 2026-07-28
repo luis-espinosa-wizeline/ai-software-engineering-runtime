@@ -1,46 +1,43 @@
-"""Provider-agnostic capability request and result models."""
+"""Provider-neutral contracts for executable capabilities."""
 
-from datetime import datetime
-from enum import StrEnum
-from uuid import uuid4
+from typing import Annotated, Protocol, runtime_checkable
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
-from app.shared import CapabilityId, DomainModel, JsonValue, Metadata, RuntimeId
+from app.capabilities.artifact import Artifact
+from app.shared import DomainModel, JsonValue
 
-
-class CapabilityStatus(StrEnum):
-    """Outcome state of a capability invocation."""
-
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-
-
-class CapabilityMetadata(DomainModel):
-    """Observable facts about a capability invocation."""
-
-    provider: str | None = None
-    model: str | None = None
-    duration_ms: int | None = None
-    attributes: Metadata = Field(default_factory=dict)
+type ActionContractIdentifier = Annotated[
+    str,
+    StringConstraints(
+        min_length=1,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+    ),
+]
 
 
 class CapabilityRequest(DomainModel):
-    """A workflow's provider-neutral request for a capability."""
+    """Fully resolved inputs prepared for one capability invocation."""
 
-    capability_id: CapabilityId
+    action_contract: ActionContractIdentifier
     inputs: dict[str, JsonValue] = Field(default_factory=dict)
-    request_id: RuntimeId = Field(default_factory=uuid4)
-    requested_at: datetime
-    metadata: Metadata = Field(default_factory=dict)
 
 
 class CapabilityResult(DomainModel):
-    """The recorded result of fulfilling a capability request."""
+    """Artifacts produced by one capability invocation."""
 
-    request_id: RuntimeId
-    status: CapabilityStatus
-    completed_at: datetime
-    outputs: dict[str, JsonValue] = Field(default_factory=dict)
-    error: str | None = None
-    metadata: CapabilityMetadata = Field(default_factory=CapabilityMetadata)
+    artifacts: tuple[Artifact, ...] = Field(min_length=1)
+
+
+@runtime_checkable
+class Capability(Protocol):
+    """Executable implementation of an action contract."""
+
+    @property
+    def action_contract(self) -> ActionContractIdentifier:
+        """Identify the provider-neutral action implemented by this capability."""
+        ...
+
+    def execute(self, request: CapabilityRequest) -> CapabilityResult:
+        """Transform fully resolved inputs into artifacts."""
+        ...
