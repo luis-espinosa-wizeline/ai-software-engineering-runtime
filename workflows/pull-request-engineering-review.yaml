@@ -1,0 +1,78 @@
+name: pull-request-engineering-review
+version: "1"
+description: Analyze every changed source file and publish one Engineering Analysis comment.
+
+inputs:
+  repository:
+    type: string
+  pull_request_number:
+    type: integer
+
+steps:
+  - id: read_changed_files
+    action: ReadChangedFiles
+    inputs:
+      repository:
+        workflow_input: repository
+      pull_request_number:
+        workflow_input: pull_request_number
+    outputs:
+      - changed_files
+
+  - id: read_files
+    action: ReadFile
+    inputs:
+      path:
+        step_output:
+          step: read_changed_files
+          artifact: changed_files
+    outputs:
+      - SourceCode
+    iteration:
+      input: path
+
+  - id: analyze_source_code
+    action: AnalyzeSourceCode
+    inputs:
+      SourceCode:
+        step_output:
+          step: read_files
+          artifact: SourceCode
+    outputs:
+      - engineering_findings
+    iteration:
+      input: SourceCode
+
+  - id: merge_engineering_findings
+    action: MergeEngineeringFindings
+    inputs:
+      engineering_findings:
+        step_output:
+          step: analyze_source_code
+          artifact: engineering_findings
+    outputs:
+      - engineering_findings
+
+  - id: generate_markdown
+    action: GenerateMarkdown
+    inputs:
+      engineering_findings:
+        step_output:
+          step: merge_engineering_findings
+          artifact: engineering_findings
+    outputs:
+      - markdown
+
+  - id: publish_github_comment
+    action: PublishGitHubComment
+    inputs:
+      markdown:
+        step_output:
+          step: generate_markdown
+          artifact: markdown
+    outputs:
+      - publication_result
+
+result:
+  step: publish_github_comment
+  artifact: publication_result

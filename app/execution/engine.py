@@ -1,11 +1,19 @@
 """Deterministic sequential execution of immutable execution plans."""
 
-from app.capabilities import Artifact, CapabilityRequest, CapabilityResolver
+from app.capabilities import (
+    Artifact,
+    CapabilityImplementation,
+    CapabilityRequest,
+    CapabilityResolver,
+    CapabilityResult,
+)
 from app.execution.context import ExecutionContext
 from app.execution.errors import (
     ArtifactNotFound,
     CapabilityContractMismatch,
     ExecutionContextPlanMismatch,
+    IterationInputNotCollection,
+    IterationOutputMismatch,
     MissingRequiredArtifact,
     MissingRequiredInput,
     WorkflowResultNotFound,
@@ -40,37 +48,110 @@ class ExecutionEngine:
         step: ExecutionPlanStep,
         context: ExecutionContext,
     ) -> None:
-        request = CapabilityRequest(
-            action_contract=step.action_contract,
-            inputs={
-                binding.parameter: self._resolve_binding(binding.source, context)
-                for binding in step.input_bindings
-            },
-        )
-        capability = self._capability_resolver.resolve(step.action_contract)
-        if capability.action_contract != step.action_contract:
+        implementation = self._capability_resolver.resolve(step.action_contract)
+        if implementation.capability.contract != step.action_contract:
             raise CapabilityContractMismatch(
                 expected=step.action_contract,
-                actual=capability.action_contract,
+                actual=implementation.capability.contract,
             )
 
-        result = capability.execute(request)
+        artifacts = tuple(
+            self._resolve_binding(binding.parameter, binding.source, context)
+            for binding in step.input_bindings
+        )
+        if step.iteration is not None:
+            self._execute_iteration(step, artifacts, implementation, context)
+            return
+
+        result = self._invoke(implementation, artifacts)
         for artifact in result.artifacts:
             context.store_artifact(step.step_id, artifact)
 
     @staticmethod
+    def _invoke(
+        implementation: CapabilityImplementation,
+        artifacts: tuple[Artifact, ...],
+    ) -> CapabilityResult:
+        return implementation.execute(
+            CapabilityRequest(
+                capability=implementation.capability,
+                artifacts=artifacts,
+            )
+        )
+
+    def _execute_iteration(
+        self,
+        step: ExecutionPlanStep,
+        artifacts: tuple[Artifact, ...],
+        implementation: CapabilityImplementation,
+        context: ExecutionContext,
+    ) -> None:
+        assert step.iteration is not None
+        parameter = step.iteration.input_parameter
+        iterated_artifact = next(
+            artifact for artifact in artifacts if artifact.name == parameter
+        )
+        collection = iterated_artifact.payload
+        if not isinstance(collection, list):
+            raise IterationInputNotCollection(step.step_id, parameter)
+
+        collected: dict[str, list[JsonValue]] = {
+            output: [] for output in step.outputs
+        }
+        for index, item in enumerate(collection):
+            invocation_artifacts = tuple(
+                Artifact(name=artifact.name, payload=item)
+                if artifact.name == parameter
+                else artifact
+                for artifact in artifacts
+            )
+            result = self._invoke(implementation, invocation_artifacts)
+            self._collect_iteration_result(step, index, result, collected)
+
+        for output_name, payloads in collected.items():
+            context.store_artifact(
+                step.step_id,
+                Artifact(name=output_name, payload=payloads),
+            )
+
+    @staticmethod
+    def _collect_iteration_result(
+        step: ExecutionPlanStep,
+        index: int,
+        result: CapabilityResult,
+        collected: dict[str, list[JsonValue]],
+    ) -> None:
+        actual = tuple(artifact.name for artifact in result.artifacts)
+        if len(actual) != len(set(actual)) or set(actual) != set(step.outputs):
+            raise IterationOutputMismatch(
+                step.step_id,
+                index,
+                expected=step.outputs,
+                actual=actual,
+            )
+        by_name = {artifact.name: artifact for artifact in result.artifacts}
+        for output in step.outputs:
+            collected[output].append(by_name[output].payload)
+
+    @staticmethod
     def _resolve_binding(
+        parameter: str,
         source: PlanInputReference | StepOutputReference,
         context: ExecutionContext,
-    ) -> JsonValue:
+    ) -> Artifact:
         if isinstance(source, PlanInputReference):
             try:
-                return context.inputs[source.input_name]
+                return Artifact(name=parameter, payload=context.inputs[source.input_name])
             except KeyError as error:
                 raise MissingRequiredInput(source.input_name) from error
 
         try:
-            return context.get_artifact(source.step_id, source.output_name).payload
+            source_artifact = context.get_artifact(source.step_id, source.output_name)
+            return Artifact(
+                name=parameter,
+                payload=source_artifact.payload,
+                metadata=source_artifact.metadata,
+            )
         except ArtifactNotFound as error:
             raise MissingRequiredArtifact(source.step_id, source.output_name) from error
 

@@ -20,7 +20,7 @@ Step Execution Lifecycle
 CapabilityRequest
       |
       v
- Capability
+CapabilityImplementation
       |
       v
 CapabilityResult
@@ -32,9 +32,9 @@ ExecutionContext
 Workflow Result Artifact
 ```
 
-Execution is sequential. The engine traverses the plan's steps in declared order
-and applies the same lifecycle to every step. It does not distinguish first,
-intermediate, last, or single-workflow steps.
+Plan steps execute in declared order. A normal step is invoked once; a step with
+the iteration pattern is invoked once per collection element, sequentially. See
+[Execution Patterns](execution-patterns.md).
 
 ## Uniform Step Lifecycle
 
@@ -42,36 +42,38 @@ For each plan step, the engine:
 
 1. resolves every input binding from execution inputs or previously stored
    artifacts;
-2. constructs a `CapabilityRequest` containing the step's Action Contract and
-   fully resolved values;
-3. resolves the capability implementing that Action Contract;
-4. invokes the capability;
+2. wraps every resolved binding as a named input artifact;
+3. constructs a `CapabilityRequest` containing the step's Capability and those
+   artifacts;
+4. resolves and invokes the implementation for that Action Contract;
 5. receives a `CapabilityResult`; and
 6. stores every returned artifact under the producing step in the
    `ExecutionContext`.
 
-No step knows its position in the workflow. Capabilities receive only a
+No step knows its position in the workflow. Implementations receive only a
 `CapabilityRequest` and return only a `CapabilityResult`; they never receive the
-plan or context. The engine owns all context mutation.
+plan or context. Artifacts are the only values crossing the execution boundary.
+The engine owns all context mutation.
 
 ## Input Binding Resolution
 
 A `PlanInputReference` resolves to the corresponding concrete value in
-`ExecutionContext.inputs`. A `StepOutputReference` resolves to the payload of the
-named artifact stored for the referenced step. Consequently, capability requests
-contain values rather than Runtime references or artifacts tied to context
-storage.
+`ExecutionContext.inputs`. A `StepOutputReference` resolves to the named artifact
+stored for the referenced step. The engine creates a new input artifact named
+for the target action parameter and copies the resolved payload and metadata.
+Consequently, implementations receive artifacts without learning how or where
+the execution context stores them.
 
 Missing execution inputs and missing referenced artifacts fail deterministically
 before the affected capability is invoked.
 
 ## Capability Resolution
 
-The engine locates capabilities through the provider-neutral
+The engine locates implementations through the provider-neutral
 `CapabilityResolver` contract. `InMemoryCapabilityResolver` is the minimal
-deterministic implementation: it snapshots capabilities by Action Contract and
-does not contain provider logic, infrastructure configuration, or a dependency
-injection framework.
+deterministic implementation: it snapshots implementations by Action Contract
+and does not contain provider logic, infrastructure configuration, provider
+selection, or a dependency injection framework.
 
 Resolution fails explicitly when an Action Contract has no capability or when
 multiple capabilities declare the same Action Contract.
@@ -95,4 +97,5 @@ result.
 
 The engine does not implement parallelism, retries, recovery, compensation,
 scheduling, timeouts, persistence, execution history, telemetry, cancellation,
-distributed execution, or provider-specific integrations.
+distributed execution, or provider-specific integrations. Iteration remains
+ordered and synchronous.

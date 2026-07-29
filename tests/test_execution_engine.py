@@ -5,6 +5,7 @@ import pytest
 
 from app.capabilities import (
     Artifact,
+    Capability,
     CapabilityRequest,
     CapabilityResult,
     InMemoryCapabilityResolver,
@@ -25,6 +26,7 @@ from app.execution import (
     WorkflowResultNotFound,
 )
 from app.shared import JsonValue
+from tests.capability_fixtures import capability
 
 EXECUTION_ID = UUID("00000000-0000-0000-0000-000000000001")
 
@@ -35,13 +37,13 @@ class RecordingCapability:
         action_contract: str,
         implementation: Callable[[CapabilityRequest], CapabilityResult],
     ) -> None:
-        self._action_contract = action_contract
+        self._capability = capability(action_contract)
         self._implementation = implementation
         self.requests: list[CapabilityRequest] = []
 
     @property
-    def action_contract(self) -> str:
-        return self._action_contract
+    def capability(self) -> Capability:
+        return self._capability
 
     def execute(self, request: CapabilityRequest) -> CapabilityResult:
         self.requests.append(request)
@@ -114,8 +116,8 @@ def test_engine_executes_multiple_steps_sequentially_and_resolves_bindings() -> 
                 Artifact(
                     name="changes",
                     payload={
-                        "repository": request.inputs["repository"],
-                        "pull_request": request.inputs["pull_request"],
+                        "repository": request.artifact("repository").payload,
+                        "pull_request": request.artifact("pull_request").payload,
                     },
                 ),
             )
@@ -127,7 +129,10 @@ def test_engine_executes_multiple_steps_sequentially_and_resolves_bindings() -> 
             artifacts=(
                 Artifact(
                     name="review",
-                    payload={"changes": request.inputs["changes"], "approved": True},
+                    payload={
+                        "changes": request.artifact("changes").payload,
+                        "approved": True,
+                    },
                 ),
             )
         )
@@ -152,19 +157,25 @@ def test_engine_executes_multiple_steps_sequentially_and_resolves_bindings() -> 
     assert execution_order == ["retrieve", "analyze"]
     assert retrieve.requests == [
         CapabilityRequest(
-            action_contract="repository.retrieve_changes",
-            inputs={"repository": "example/runtime", "pull_request": 42},
+            capability=capability("repository.retrieve_changes"),
+            artifacts=(
+                Artifact(name="repository", payload="example/runtime"),
+                Artifact(name="pull_request", payload=42),
+            ),
         )
     ]
     assert analyze.requests == [
         CapabilityRequest(
-            action_contract="code.analysis",
-            inputs={
-                "changes": {
-                    "repository": "example/runtime",
-                    "pull_request": 42,
-                }
-            },
+            capability=capability("code.analysis"),
+            artifacts=(
+                Artifact(
+                    name="changes",
+                    payload={
+                        "repository": "example/runtime",
+                        "pull_request": 42,
+                    },
+                ),
+            ),
         )
     ]
     assert context.get_artifact("retrieve-changes", "changes").payload == {
@@ -228,7 +239,9 @@ def test_engine_owns_context_mutation_and_stores_result_after_invocation() -> No
     observed_before_return: list[bool] = []
 
     def produce(request: CapabilityRequest) -> CapabilityResult:
-        assert request == CapabilityRequest(action_contract="artifact.produce")
+        assert request == CapabilityRequest(
+            capability=capability("artifact.produce")
+        )
         observed_before_return.append(context.has_artifact("produce", "result"))
         return CapabilityResult(artifacts=(Artifact(name="result", payload="done"),))
 

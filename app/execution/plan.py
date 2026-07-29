@@ -38,6 +38,12 @@ class InputBinding(DomainModel):
     source: InputReference
 
 
+class Iteration(DomainModel):
+    """Expand one bound collection into ordered Capability invocations."""
+
+    input_parameter: PlanIdentifier
+
+
 class ExecutionPlanStep(DomainModel):
     """One provider-neutral action required by an execution strategy."""
 
@@ -45,12 +51,24 @@ class ExecutionPlanStep(DomainModel):
     action_contract: PlanIdentifier
     input_bindings: tuple[InputBinding, ...] = ()
     outputs: tuple[PlanIdentifier, ...] = ()
+    iteration: Iteration | None = None
 
     @model_validator(mode="after")
     def validate_unique_outputs(self) -> ExecutionPlanStep:
         """Ensure every output can be referenced unambiguously."""
         if len(self.outputs) != len(set(self.outputs)):
             raise ValueError(f"Step {self.step_id!r} contains duplicate output names")
+        if self.iteration is not None:
+            parameters = tuple(binding.parameter for binding in self.input_bindings)
+            if parameters.count(self.iteration.input_parameter) != 1:
+                raise ValueError(
+                    f"Step {self.step_id!r} iteration must reference exactly one bound input "
+                    f"{self.iteration.input_parameter!r}"
+                )
+            if not self.outputs:
+                raise ValueError(
+                    f"Iterated step {self.step_id!r} must declare output names"
+                )
         return self
 
 

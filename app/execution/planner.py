@@ -6,6 +6,7 @@ from app.execution.plan import (
     ExecutionPlan,
     ExecutionPlanStep,
     InputBinding,
+    Iteration,
     PlanInputReference,
     PlanResultReference,
     StepOutputReference,
@@ -79,6 +80,7 @@ class ExecutionPlanner:
         if len(workflow.required_inputs) != len(set(workflow.required_inputs)):
             raise InvalidWorkflowForPlanning("Workflow contains duplicate required inputs")
 
+        optional_inputs = set(workflow.input_names) - set(workflow.required_inputs)
         for step in workflow.steps:
             if step.action_contract is None:
                 raise InvalidWorkflowForPlanning(
@@ -93,6 +95,27 @@ class ExecutionPlanner:
                 raise InvalidWorkflowForPlanning(
                     f"Workflow step {step.step_id!r} contains duplicate input parameters"
                 )
+            for binding in step.input_bindings:
+                source = binding.source
+                if (
+                    isinstance(source, WorkflowInputReference)
+                    and source.input_name in optional_inputs
+                ):
+                    raise InvalidWorkflowForPlanning(
+                        f"Workflow step {step.step_id!r} binds optional workflow input "
+                        f"{source.input_name!r}; optional bindings require an explicit "
+                        "default or conditional execution semantic"
+                    )
+            if step.iteration is not None:
+                if step.iteration.input_parameter not in parameters:
+                    raise InvalidWorkflowForPlanning(
+                        f"Workflow step {step.step_id!r} iteration references unbound "
+                        f"input {step.iteration.input_parameter!r}"
+                    )
+                if not step.outputs:
+                    raise InvalidWorkflowForPlanning(
+                        f"Iterated workflow step {step.step_id!r} must declare outputs"
+                    )
 
     def _validate_semantics(self, workflow: WorkflowDefinition) -> None:
         positions = {step.step_id: position for position, step in enumerate(workflow.steps)}
@@ -111,13 +134,13 @@ class ExecutionPlanner:
         outputs: dict[str, set[str]],
     ) -> dict[str, set[str]]:
         dependencies = {step.step_id: set[str]() for step in workflow.steps}
-        required_inputs = set(workflow.required_inputs)
+        declared_inputs = set(workflow.input_names)
 
         for step in workflow.steps:
             for binding in step.input_bindings:
                 source = binding.source
                 if isinstance(source, WorkflowInputReference):
-                    if source.input_name not in required_inputs:
+                    if source.input_name not in declared_inputs:
                         raise WorkflowSemanticError(
                             f"Step {step.step_id!r} references unknown workflow input "
                             f"{source.input_name!r}"
@@ -231,6 +254,11 @@ class ExecutionPlanner:
                 for binding in step.input_bindings
             ),
             outputs=step.outputs,
+            iteration=(
+                Iteration(input_parameter=step.iteration.input_parameter)
+                if step.iteration is not None
+                else None
+            ),
         )
 
     @staticmethod

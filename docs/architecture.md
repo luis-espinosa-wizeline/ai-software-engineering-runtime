@@ -8,6 +8,17 @@ technologies that deliver events, fulfill capabilities, execute tools, persist
 state, or receive results.
 
 ```text
+Project directory
+        |
+        v
+ ProjectLoader
+        |
+        v
+    Project
+        |-- WorkflowDefinitions
+        `-- CapabilityDescriptors
+        |
+        v
 WorkflowDefinition
         |
         v
@@ -35,10 +46,32 @@ expresses the provider-neutral strategy for satisfying the workflow. Policy
 evaluates that strategy before the Execution Engine coordinates it and produces a
 result.
 
+Project discovery precedes this stable planning and execution chain.
+`ProjectLoader` creates an immutable snapshot of declarative resources; it does
+not select, plan, resolve, import, instantiate, or execute them. See
+[Project Discovery](runtime/project-discovery.md) for the supported filesystem
+layout and YAML schemas.
+
 The Runtime executes plans, not workflow definitions directly. An
 `ExecutionContext` provides the mutable state for one plan execution. These
 boundaries keep declarative workflow intent, deterministic planning, mutable
 runtime state, and execution as separate architectural concerns.
+
+External event handling and dependency assembly sit outside that chain. The
+provider-neutral Runtime Host SPI selects an existing workflow, obtains a
+configured resolver, creates the plan and context, and invokes the Execution
+Engine exactly once. Before composition, it validates normalized event inputs
+against the selected Workflow's retained structural input definitions. It never
+performs step execution or Artifact transformation. See
+[Runtime Host SPI](runtime/runtime-host-spi.md) and
+[Workflow Input Contracts](runtime/workflow-input-contracts.md).
+
+The first concrete adapter is the
+[GitHub Runtime Host](runtime/github-runtime-host.md). It verifies and
+normalizes pull-request webhooks, resolves a GitHub App installation token,
+prepares an execution-scoped exact-SHA workspace, and supplies a
+workspace-aware `CapabilityComposition`. These dependencies point inward
+through the Host SPI; the Execution Core has no GitHub or workspace dependency.
 
 ## Major Building Blocks
 
@@ -70,6 +103,11 @@ Discovery locates workflow definitions. The registry validates and organizes
 them into a deterministic catalog, including active-version and availability
 queries. Together they make workflows available to the Runtime without coupling
 execution to a discovery mechanism.
+
+Project discovery additionally locates self-contained capability manifests.
+These produce metadata-only `CapabilityDescriptor` values and remain independent
+of executable capability resolution. A discovered `Project` contains workflow
+definitions and descriptors directly; no project-level registry is required.
 
 ### Execution Planning
 
@@ -111,16 +149,101 @@ context.
 
 ### Capabilities and Providers
 
-A capability is an executable implementation of a declared Action Contract. It
-accepts a provider-neutral `CapabilityRequest` containing fully resolved inputs
-and returns a `CapabilityResult` containing artifacts. This execution contract
-isolates Runtime orchestration from any provider, model, service, SDK, transport,
-or infrastructure used by an implementation.
+A Capability defines WHAT provider-neutral transformation the Runtime may
+request. It is an immutable domain value identified by its Action Contract and
+contains no execution behavior. Its public metadata also declares its name,
+description, category, version, input and output Artifacts, and discovery tags.
+The same metadata is available on descriptors during project discovery, making
+Capabilities understandable before implementations are loaded.
 
-Capabilities do not receive workflow definitions, execution plans, execution
+A Capability Implementation defines HOW that transformation is performed. Every
+implementation satisfies the same structural `CapabilityImplementation`
+protocol: it identifies its Capability, receives a `CapabilityRequest` containing
+named input Artifacts, and returns a `CapabilityResult` containing output
+Artifacts. The Execution Engine depends only on this protocol and never on a
+concrete implementation.
+
+A Provider is an optional infrastructure dependency used by an implementation:
+for example a filesystem, model API, repository service, or container runtime.
+It describes WITH WHAT technology an implementation works. Providers are
+completely invisible to the Runtime and do not occur in workflow, plan, engine,
+resolver, request, result, artifact, or context contracts.
+
+```text
+WHAT                 HOW                         WITH WHAT
+Capability
+    |
+    v
+Capability Implementation  ---- optionally ----> Provider
+```
+
+Implementations do not receive workflow definitions, execution plans, execution
 contexts, the execution engine, or other Runtime internals. They do not resolve
-workflow references or mutate context. The future Execution Engine prepares
-requests and owns storing returned artifacts in the ExecutionContext.
+workflow references or mutate context. The Execution Engine prepares input
+Artifacts and owns storing returned Artifacts in the ExecutionContext. This
+keeps Artifacts as the universal execution language and gives each component
+only the knowledge it needs.
+
+Different implementation classes may realize the same Capability. The current
+Runtime intentionally requires one implementation per Action Contract; choosing
+among multiple implementations and selecting providers are future concerns.
+The initial public catalog and manifest contract are documented in
+[Capability Metadata and Catalog](runtime/capability-catalog.md).
+
+### Engineering Intelligence
+
+Engineering Intelligence is built from ordinary Capabilities rather than added
+to the Runtime. `AnalyzeSourceCode` transforms a `SourceCode` Artifact into an
+`engineering_findings` Artifact containing structured `EngineeringFindings`
+source provenance, severity, confidence, category, explanation, and
+recommendation data. Source context is part of the Engineering Knowledge domain
+and passes through Runtime Artifacts without Runtime interpretation. See
+[Engineering Finding Context](runtime/engineering-finding-context.md).
+
+Its Ollama implementation is confined to the Capability package. The Runtime
+sees the same provider-neutral Capability request and result contracts it uses
+for repository operations. Presentation and publishing remain separate
+downstream transformations. See
+[Engineering Intelligence](runtime/engineering-intelligence.md).
+
+Per-source analyses produced through iteration remain an ordered collection.
+`MergeEngineeringFindings` combines them as an ordinary Analysis Capability,
+because merging Engineering Knowledge is business semantics rather than Runtime
+execution semantics. See
+[Engineering Knowledge Aggregation](runtime/engineering-knowledge-aggregation.md).
+
+### Engineering Communication
+
+Engineering Communication transforms structured knowledge into human-readable
+representations without changing that knowledge. `GenerateMarkdown`
+deterministically renders `engineering_findings` into a `markdown` Artifact
+whose payload is a `MarkdownDocument`.
+
+The implementation uses no AI model or provider and contains no publishing
+behavior. A later delivery Capability can consume the document without coupling
+analysis or presentation to its destination. See
+[Engineering Communication](runtime/engineering-communication.md).
+
+### Engineering Delivery
+
+Engineering Delivery sends final documents to external systems without changing
+them. `PublishGitHubComment` consumes a `markdown` Artifact and emits a
+provider-neutral `publication_result`.
+
+The Capability Implementation depends on `EngineeringPublisher`; the concrete
+GitHub adapter alone knows repository targeting, pull-request numbers,
+authentication, HTTP paths, and provider responses. Delivery failures are mapped
+to domain errors before crossing that boundary. See
+[Engineering Delivery](runtime/engineering-delivery.md).
+
+### First End-to-End Engineering Workflow
+
+The declarative `pull-request-engineering-review` workflow composes repository
+reading, Runtime iteration, source analysis, knowledge aggregation, Markdown
+generation, and GitHub delivery. It uses the existing discovery, planning,
+execution, Artifact, Capability, and provider boundaries without introducing
+workflow-specific Runtime behavior. See
+[First End-to-End Engineering Workflow](runtime/first-engineering-workflow.md).
 
 Required capabilities and action contracts have different roles. An action
 contract identifies the provider-neutral operation a step intends to perform—what
@@ -147,6 +270,12 @@ result reference. It never infers completion from the last step or last artifact
 The engine therefore coordinates execution without making workflow decisions.
 Capabilities receive no plan or context; context mutation remains owned by the
 engine.
+
+An execution-plan step may declare deterministic iteration over one bound input.
+The engine expands a list payload into ordered, ordinary Capability invocations
+and aggregates each declared output into a list-valued Artifact. This changes
+orchestration cardinality without changing Capability contracts or provider
+isolation. See [Execution Patterns](runtime/execution-patterns.md).
 
 ### Results and Publishers
 
@@ -180,7 +309,7 @@ ExecutionEngine
 CapabilityRequest
        |
        v
-  Capability
+CapabilityImplementation
        |
        v
 CapabilityResult
@@ -189,9 +318,9 @@ CapabilityResult
 ExecutionContext
 ```
 
-The request identifies the Action Contract and carries fully resolved values. A
-capability performs the work and returns one or more artifacts. The engine owns
-all ExecutionContext mutation.
+The request identifies the Capability and carries fully resolved input Artifacts.
+An implementation performs the work and returns one or more output Artifacts.
+The engine owns all ExecutionContext mutation.
 
 Future Runtime evolution may introduce:
 
@@ -211,8 +340,9 @@ domain models.
   execution.
 - **Policy Engine:** validates or modifies the execution strategy.
 - **Execution Engine:** coordinates execution.
-- **Capabilities:** implement technical behavior.
-- **Providers:** execute concrete integrations.
+- **Capability:** defines WHAT transformation may be requested.
+- **Capability Implementation:** defines HOW the transformation is executed.
+- **Provider:** optional infrastructure known only by an implementation.
 
 These responsibilities compose into Runtime behavior while remaining independently
 understandable.

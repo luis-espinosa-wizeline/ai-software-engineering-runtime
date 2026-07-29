@@ -44,9 +44,10 @@ capabilities.
 
 ## Separation of Responsibilities
 
-- **WorkflowDefinition** expresses reusable workflow intent: required inputs,
-  ordered steps, action contracts, bindings, outputs, and the intended result.
-  It remains a declarative model and does not express execution behavior.
+- **WorkflowDefinition** expresses reusable workflow intent: structurally typed
+  input definitions, ordered steps, action contracts, bindings, outputs, and
+  the intended result. It remains a declarative model and does not express
+  execution behavior.
 - **ExecutionPlanner** validates that intent and translates it into an execution
   strategy.
 - **ExecutionPlan** is the immutable, provider-neutral strategy produced by
@@ -59,8 +60,10 @@ capabilities.
 Before constructing a plan, the planner verifies that:
 
 - the workflow has steps and a result;
-- step identifiers, required inputs, step outputs, and binding parameters are
+- step identifiers, declared inputs, step outputs, and binding parameters are
   unambiguous;
+- optional inputs are not bound to steps until defaults or conditional
+  execution provide an explicit absence semantic;
 - every step declares an action contract;
 - bindings refer to declared workflow inputs or outputs from known steps;
 - referenced outputs exist;

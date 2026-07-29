@@ -5,6 +5,7 @@ from app.execution import (
     ExecutionPlan,
     ExecutionPlanStep,
     InputBinding,
+    Iteration,
     PlanInputReference,
     PlanResultReference,
     StepOutputReference,
@@ -119,6 +120,37 @@ def test_step_requires_an_action_contract_and_unique_outputs() -> None:
             step_id="analyze",
             action_contract="code.analysis",
             outputs=("review", "review"),
+        )
+
+
+def test_iterated_step_requires_bound_input_and_declared_outputs() -> None:
+    binding = InputBinding(
+        parameter="item",
+        source=PlanInputReference(input_name="items"),
+    )
+    step = ExecutionPlanStep(
+        step_id="transform",
+        action_contract="Transform",
+        input_bindings=(binding,),
+        outputs=("result",),
+        iteration=Iteration(input_parameter="item"),
+    )
+
+    assert step.iteration == Iteration(input_parameter="item")
+    with pytest.raises(ValidationError, match="exactly one bound input"):
+        ExecutionPlanStep(
+            step_id="transform",
+            action_contract="Transform",
+            input_bindings=(binding,),
+            outputs=("result",),
+            iteration=Iteration(input_parameter="missing"),
+        )
+    with pytest.raises(ValidationError, match="must declare output"):
+        ExecutionPlanStep(
+            step_id="transform",
+            action_contract="Transform",
+            input_bindings=(binding,),
+            iteration=Iteration(input_parameter="item"),
         )
 
 

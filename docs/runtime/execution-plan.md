@@ -53,6 +53,11 @@ identify the executable operation. Capability resolution occurs after planning.
 The `ExecutionPlanner` only preserves the action contract declared by each
 workflow step.
 
+A step may additionally declare an `Iteration` naming one bound input parameter.
+That execution metadata changes how many times the action is invoked without
+changing its Action Contract, bindings, or Capability request/result contracts.
+See [Execution Patterns](execution-patterns.md).
+
 A plan input reference points to one of the plan's required inputs. A step output
 reference points to an output declared by an earlier step. The final plan result
 is likewise a reference to a declared step output.

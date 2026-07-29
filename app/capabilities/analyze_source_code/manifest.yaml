@@ -1,0 +1,16 @@
+name: AnalyzeSourceCode
+description: Analyze source code and produce provider-neutral engineering findings.
+category: analysis
+contract: AnalyzeSourceCode
+version: "1"
+inputs:
+  - name: SourceCode
+    description: Source path and UTF-8 text content.
+outputs:
+  - name: engineering_findings
+    description: Structured, provider-neutral engineering findings.
+tags:
+  - analysis
+  - source-code
+  - engineering-intelligence
+entrypoint: app.capabilities.analyze_source_code.implementation

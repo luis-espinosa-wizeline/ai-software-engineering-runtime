@@ -1,0 +1,16 @@
+name: ReadFile
+description: Read the UTF-8 text content of a file.
+category: repository
+contract: ReadFile
+version: "1"
+inputs:
+  - name: path
+    description: Path of the file to read.
+outputs:
+  - name: SourceCode
+    description: Source path and UTF-8 text content.
+tags:
+  - repository
+  - file
+  - read
+entrypoint: app.capabilities.read_file.implementation

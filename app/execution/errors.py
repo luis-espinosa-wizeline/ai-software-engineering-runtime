@@ -82,3 +82,29 @@ class CapabilityContractMismatch(ExecutionEngineError):
 
     def __init__(self, *, expected: str, actual: str) -> None:
         super().__init__(f"Resolved capability implements {actual!r}; expected {expected!r}")
+
+
+class IterationInputNotCollection(ExecutionEngineError):
+    """Raised when an iterated input does not contain a collection."""
+
+    def __init__(self, step_id: str, parameter: str) -> None:
+        super().__init__(
+            f"Iterated input {parameter!r} for step {step_id!r} must contain a list"
+        )
+
+
+class IterationOutputMismatch(ExecutionEngineError):
+    """Raised when one iteration does not produce the declared outputs."""
+
+    def __init__(
+        self,
+        step_id: str,
+        index: int,
+        *,
+        expected: tuple[str, ...],
+        actual: tuple[str, ...],
+    ) -> None:
+        super().__init__(
+            f"Iteration {index} of step {step_id!r} produced outputs {actual!r}; "
+            f"expected {expected!r}"
+        )

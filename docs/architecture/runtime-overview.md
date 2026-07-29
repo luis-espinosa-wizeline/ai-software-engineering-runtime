@@ -22,11 +22,14 @@ A workflow is a product-level process coordinated by the Runtime. The first supp
 
 ### Capability
 
-A capability is an executable implementation of a provider-neutral Action Contract. It receives a fully resolved CapabilityRequest and returns artifacts in a CapabilityResult.
+A Capability defines WHAT provider-neutral transformation may be requested. A
+Capability Implementation defines HOW it is performed by transforming input
+Artifacts into output Artifacts.
 
 ### Provider
 
-A provider implements one or more capabilities. Providers do not know which workflow requested the capability.
+A Provider is an optional infrastructure dependency used privately by a
+Capability Implementation. Providers are invisible to the Runtime.
 
 ### Policy
 
@@ -42,7 +45,9 @@ Execution is the deterministic sequential coordination of an ExecutionPlan. The 
 
 ### Publisher
 
-A publisher delivers workflow results to external systems such as GitHub.
+A publisher delivers immutable Engineering Documents to external systems.
+`EngineeringPublisher` is the provider-neutral boundary; the first adapter
+publishes Markdown as a GitHub pull-request comment.
 
 ## Component Diagram
 
@@ -64,4 +69,7 @@ flowchart TD
 
 ## Current Scope
 
-This repository implements deterministic sequential plan execution but intentionally does not implement parallelism, retries, scheduling, provider integrations, GitHub integration, policy logic, execution sandboxing, persistence, telemetry, or publishing behavior.
+This repository implements deterministic sequential plan execution and a
+GitHub pull-request comment publishing Capability. It intentionally does not
+implement parallelism, retries, scheduling, provider selection, GitHub triggers,
+policy logic, execution sandboxing, persistence, or telemetry.

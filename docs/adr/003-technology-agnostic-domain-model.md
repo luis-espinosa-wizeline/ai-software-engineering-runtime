@@ -1,47 +1,77 @@
-# ADR-003: Technology-Agnostic Domain Model
+# ADR-003 — Technology Agnostic Domain Model
 
 ## Status
 
 Accepted
 
+Validated by Epic 9
+
 ## Context
 
-The Runtime coordinates workflows that may be initiated, executed, and published
-through different technologies. If domain concepts depend directly on a specific
-provider, framework, persistence mechanism, or protocol, those concepts become
-difficult to reuse and test outside that technology.
+Engineering knowledge should remain independent from providers, transport mechanisms, and execution infrastructure.
 
-Infrastructure choices are expected to change more frequently than the stable
-Runtime concepts documented in [ADR-002](002-frozen-runtime-architecture.md).
+The Runtime should operate on stable Engineering concepts rather than provider-specific representations.
 
 ## Decision
 
-The Runtime domain remains independent from infrastructure. Domain models must not
-depend on:
+Engineering information shall be represented through technology-agnostic Artifacts.
 
-- GitHub;
-- FastAPI;
-- OpenAI;
-- Ollama;
-- Agent Kit;
-- databases; or
-- transport protocols.
+Artifacts represent Engineering concepts rather than implementation details.
 
-These technologies belong in adapters and infrastructure layers. They may translate
-between external representations and the Runtime domain, but they do not define the
-domain model.
+Examples include:
 
-The `WorkflowExecution` aggregate described in
-[ADR-001](001-workflow-execution-aggregate-root.md) follows the same rule: it owns
-execution state without depending on how that state is transported, stored, or
-fulfilled.
+- SourceCode
+- EngineeringFinding
+- MarkdownDocument
+- PublicationResult
+
+Capabilities transform one Engineering Artifact into another.
+
+The Runtime transports Artifacts but never interprets their Engineering meaning.
+
+## Validation
+
+The first end-to-end Engineering Workflow validated this decision.
+
+Engineering knowledge successfully evolved through the following transformations:
+
+Pull Request Event
+
+↓
+
+Changed Files
+
+↓
+
+SourceCode
+
+↓
+
+EngineeringFinding
+
+↓
+
+Merged Engineering Findings
+
+↓
+
+MarkdownDocument
+
+↓
+
+GitHub Comment
+
+Throughout this workflow:
+
+- provider implementations remained isolated,
+- provenance was preserved,
+- no Runtime changes were required,
+- Artifacts remained independent from GitHub, Ollama, or any execution technology.
+
+The Runtime transported Artifacts without understanding their Engineering semantics.
 
 ## Consequences
 
-- Domain models can be used with different triggers, providers, publishers, and
-  transports.
-- Domain behavior can be tested without external systems or framework setup.
-- Infrastructure can be replaced or upgraded with limited impact on the domain.
-- Adapters must translate technology-specific data into domain concepts.
-- Technology-specific fields and types must not leak into Runtime domain models,
-  even when doing so would simplify one integration.
+New providers should integrate by implementing Capabilities rather than introducing new Runtime abstractions.
+
+Engineering concepts should evolve through Artifact contracts instead of provider-specific models.

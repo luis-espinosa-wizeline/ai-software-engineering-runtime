@@ -1,0 +1,84 @@
+# ADR-004 — Separate Runtime Execution Core from Runtime Host
+
+## Status
+
+Accepted
+
+## Context
+
+The Runtime Execution Core has been validated through the first end-to-end Engineering Workflow.
+
+However, executing workflows in production requires responsibilities that are intentionally outside deterministic workflow execution.
+
+These include:
+
+- receiving external events,
+- selecting a Workflow,
+- configuring providers,
+- constructing Capability implementations,
+- building the Capability Resolver,
+- creating the ExecutionContext,
+- invoking the Planner and Execution Engine.
+
+These concerns belong to application hosting rather than workflow execution.
+
+## Decision
+
+Separate the system into two architectural layers.
+
+### Runtime Host
+
+Responsible for:
+
+- external event intake,
+- trigger interpretation,
+- workflow selection,
+- provider configuration,
+- dependency assembly,
+- execution startup.
+
+The Host prepares an execution request but does not execute Engineering logic.
+
+### Runtime Execution Core
+
+Responsible for:
+
+- workflow planning,
+- deterministic execution,
+- execution patterns,
+- Artifact routing,
+- Capability composition,
+- Execution Context management.
+
+The Execution Core remains completely provider-neutral.
+
+## Rationale
+
+This separation preserves a deterministic Runtime while allowing multiple deployment models.
+
+Examples of Runtime Hosts include:
+
+- GitHub Webhooks
+- REST APIs
+- CLI applications
+- Background workers
+- Scheduled jobs
+- IDE integrations
+
+Each Host can launch the same Runtime without modifying the execution core.
+
+## Consequences
+
+The Runtime Execution Core can remain stable while deployment-specific concerns evolve independently.
+
+Future work related to:
+
+- FastAPI,
+- GitHub authentication,
+- webhook handling,
+- dependency injection,
+- provider configuration,
+
+belongs to the Runtime Host rather than the Runtime Execution Core.
+
+Similarly, future Runtime evolution should be justified only by new execution semantics rather than application integration requirements.

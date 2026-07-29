@@ -1,0 +1,17 @@
+name: PublishGitHubComment
+description: Publish a Markdown document as a GitHub Pull Request comment.
+category: publishing
+contract: PublishGitHubComment
+version: "1"
+inputs:
+  - name: markdown
+    description: Final Markdown document to publish.
+outputs:
+  - name: publication_result
+    description: Provider-neutral publication outcome.
+tags:
+  - publishing
+  - github
+  - pull-request
+  - engineering-delivery
+entrypoint: app.capabilities.publish_github_comment.implementation

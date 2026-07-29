@@ -1,0 +1,173 @@
+# ADR-005: Repository Access Through Host-Prepared Immutable Workspaces
+
+## Status
+
+Accepted
+
+---
+
+## Context
+
+The Runtime Execution Core operates on provider-neutral Engineering Artifacts and must remain completely unaware of external repository providers such as GitHub.
+
+Engineering Capabilities require access to source files during workflow execution. However, external events (for example, GitHub Pull Request webhooks) provide repository identifiers rather than local files.
+
+Several repository materialization strategies were considered:
+
+- Cloning or checking out a repository into a temporary workspace.
+- Downloading repository archives.
+- Reading individual files through provider APIs.
+- Virtual repository abstractions.
+- Shared repository caches.
+
+The architecture requires a solution that:
+
+- preserves Runtime provider neutrality;
+- supports future Engineering Capabilities beyond code review;
+- isolates infrastructure concerns inside Runtime Hosts;
+- avoids introducing unnecessary abstractions before multiple implementations exist.
+
+---
+
+## Decision
+
+Runtime Hosts are responsible for preparing an immutable repository workspace before invoking the Runtime Execution Core.
+
+The architectural contract is:
+
+> Capabilities operate on repository-relative logical paths. A Host-configured implementation resolves those paths inside a prepared immutable repository workspace.
+
+The Runtime Execution Core does not know:
+
+- where the workspace exists;
+- how it was created;
+- which provider supplied it;
+- whether it originated from Git, an archive, a cache, or another source.
+
+Repository materialization is therefore considered Host infrastructure rather than Runtime behavior.
+
+CapabilityComposition is responsible for constructing workspace-aware implementations such as:
+
+- RepositoryReader
+- ReadFileImplementation
+- AnalyzeSourceCodeImplementation
+- Publication implementations
+
+without exposing workspace details outside those implementations.
+
+---
+
+## Responsibilities
+
+### Runtime Host
+
+Responsible for:
+
+- authenticating provider events;
+- preparing repository workspaces;
+- enforcing resource limits;
+- creating execution-scoped CapabilityComposition;
+- invoking RuntimeHost.execute();
+- cleaning up execution resources.
+
+Must not:
+
+- execute workflow logic;
+- invoke Capabilities directly;
+- understand Runtime planning or execution.
+
+---
+
+### CapabilityComposition
+
+Responsible for assembling provider-specific implementations using the prepared workspace.
+
+Must not:
+
+- clone repositories;
+- authenticate providers;
+- prepare infrastructure.
+
+---
+
+### RepositoryReader
+
+Returns repository-relative logical paths.
+
+Must never expose:
+
+- provider-specific objects;
+- authentication details;
+- temporary filesystem paths.
+
+---
+
+### ReadFile
+
+Receives repository-relative logical paths and resolves them using the Host-provided reader.
+
+It must enforce:
+
+- workspace confinement;
+- path normalization;
+- traversal protection;
+- supported file policies.
+
+---
+
+### Runtime Execution Core
+
+Responsible only for:
+
+- workflow validation;
+- planning;
+- execution;
+- artifact routing;
+- capability resolution.
+
+It remains completely unaware of repository preparation.
+
+---
+
+## Consequences
+
+### Advantages
+
+- Preserves complete provider neutrality.
+- Keeps infrastructure outside the Runtime.
+- Supports future repository-wide Engineering Capabilities.
+- Allows repository preparation strategies to evolve independently.
+- Enables GitHub, CLI, REST, IDE, and future Hosts to share identical Runtime behavior.
+
+### Trade-offs
+
+- Hosts become responsible for workspace lifecycle.
+- Repository preparation introduces disk and network costs.
+- Cleanup and resource isolation become operational responsibilities.
+
+---
+
+## Security Considerations
+
+Hosts preparing repository workspaces should:
+
+- pin immutable commit SHAs;
+- disable repository-controlled Git hooks;
+- avoid automatic submodule execution;
+- never execute checked-out repository code;
+- enforce size and resource limits;
+- reject path traversal and unsafe symbolic links;
+- guarantee cleanup after execution.
+
+These operational concerns remain outside the Runtime Execution Core.
+
+---
+
+## Validation
+
+ADR-005 is validated by the implementation of the GitHub Runtime Host (Epic 11), where repository preparation occurs entirely before Runtime execution and all Engineering Capabilities continue operating on provider-neutral Artifacts without GitHub knowledge.
+
+The implementation uses a depth-one fetch pinned to the full pull-request head
+SHA, confines repository-relative file reads to the prepared directory, disables
+hooks, file-protocol access, submodule recursion, and interactive prompts, and
+removes the workspace on every exit path.

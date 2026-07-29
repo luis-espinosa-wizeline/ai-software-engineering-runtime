@@ -1,9 +1,10 @@
 """Workflow definition, request, and result models."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StrictBool, StringConstraints, model_validator
 
 from app.shared import (
     CapabilityId,
@@ -22,6 +23,25 @@ type WorkflowPlanningIdentifier = Annotated[
     ),
 ]
 type WorkflowInputSource = WorkflowInputReference | WorkflowStepOutputReference
+
+
+class WorkflowInputType(StrEnum):
+    """Closed set of structural types accepted at a Workflow boundary."""
+
+    STRING = "string"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    NUMBER = "number"
+    OBJECT = "object"
+    ARRAY = "array"
+
+
+class WorkflowInputDefinition(DomainModel):
+    """One structurally typed external input declared by a Workflow."""
+
+    name: WorkflowPlanningIdentifier
+    type: WorkflowInputType
+    required: StrictBool = True
 
 
 class WorkflowInputReference(DomainModel):
@@ -51,6 +71,12 @@ class WorkflowResultReference(DomainModel):
     output_name: WorkflowPlanningIdentifier
 
 
+class WorkflowIteration(DomainModel):
+    """Expand one step input collection into deterministic invocations."""
+
+    input_parameter: WorkflowPlanningIdentifier
+
+
 class WorkflowStepDefinition(DomainModel):
     """A logical unit of work in a workflow definition."""
 
@@ -61,6 +87,7 @@ class WorkflowStepDefinition(DomainModel):
     action_contract: WorkflowPlanningIdentifier | None = None
     input_bindings: tuple[WorkflowInputBinding, ...] = ()
     outputs: tuple[WorkflowPlanningIdentifier, ...] = ()
+    iteration: WorkflowIteration | None = None
     metadata: Metadata = Field(default_factory=dict)
 
 
@@ -73,9 +100,28 @@ class WorkflowDefinition(DomainModel):
     description: str | None = None
     steps: tuple[WorkflowStepDefinition, ...] = ()
     required_capabilities: tuple[CapabilityId, ...] = ()
-    required_inputs: tuple[WorkflowPlanningIdentifier, ...] = ()
+    inputs: tuple[WorkflowInputDefinition, ...] = ()
     result: WorkflowResultReference | None = None
     metadata: Metadata = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_unique_inputs(self) -> WorkflowDefinition:
+        names = self.input_names
+        if len(names) != len(set(names)):
+            raise ValueError("Workflow input names must be unique")
+        return self
+
+    @property
+    def input_names(self) -> tuple[WorkflowPlanningIdentifier, ...]:
+        """Return every declared input name in definition order."""
+        return tuple(definition.name for definition in self.inputs)
+
+    @property
+    def required_inputs(self) -> tuple[WorkflowPlanningIdentifier, ...]:
+        """Return required input names in definition order."""
+        return tuple(
+            definition.name for definition in self.inputs if definition.required
+        )
 
 
 class WorkflowRequest(DomainModel):

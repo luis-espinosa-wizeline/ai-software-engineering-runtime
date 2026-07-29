@@ -1,0 +1,16 @@
+name: GenerateMarkdown
+description: Transform structured engineering findings into a human-readable Markdown document.
+category: transformation
+contract: GenerateMarkdown
+version: "1"
+inputs:
+  - name: engineering_findings
+    description: Validated, structured engineering findings.
+outputs:
+  - name: markdown
+    description: Rendered Markdown document.
+tags:
+  - transformation
+  - markdown
+  - engineering-communication
+entrypoint: app.capabilities.generate_markdown.implementation

@@ -1,0 +1,248 @@
+# ADR-006: Asynchronous Host Execution
+
+## Status
+
+Proposed
+
+---
+
+## Context
+
+The first production Host (GitHub Runtime Host) executes the complete Engineering Workflow synchronously as part of webhook processing.
+
+Current execution flow:
+
+GitHub Pull Request
+
+↓
+
+Webhook Verification
+
+↓
+
+Workspace Preparation
+
+↓
+
+RuntimeHost.execute()
+
+↓
+
+Engineering Workflow
+
+↓
+
+GitHub Comment
+
+↓
+
+HTTP Response
+
+This approach is appropriate for initial validation because it:
+
+- minimizes operational complexity;
+- validates the Runtime architecture end-to-end;
+- simplifies debugging;
+- avoids introducing infrastructure before it is required.
+
+However, production Engineering Workflows may perform:
+
+- repository preparation;
+- static analysis;
+- multiple LLM invocations;
+- repository-wide analysis;
+- future autonomous Engineering tasks.
+
+Execution time therefore becomes unpredictable.
+
+GitHub recommends webhook handlers acknowledge delivery quickly. Long-running executions increase the likelihood of request timeouts, retries, duplicate deliveries, and reduced system resilience.
+
+The Runtime Execution Core itself is already independent of transport and request lifecycles.
+
+Only the Host execution model is affected.
+
+---
+
+## Decision
+
+Production Hosts should support asynchronous execution.
+
+The Runtime Execution Core will remain completely synchronous.
+
+Hosts become responsible for scheduling Runtime executions rather than executing them directly inside inbound request handlers.
+
+The Runtime continues exposing exactly one execution entry point:
+
+RuntimeHost.execute()
+
+No queueing, retries, scheduling, or worker concepts will be introduced into the Runtime.
+
+---
+
+## Synchronous Execution
+
+Suitable for:
+
+- local development;
+- testing;
+- CLI execution;
+- demonstrations;
+- debugging.
+
+Execution:
+
+Webhook
+
+↓
+
+RuntimeHost.execute()
+
+↓
+
+HTTP Response
+
+---
+
+## Asynchronous Execution
+
+Production execution should follow:
+
+Webhook
+
+↓
+
+Verify Event
+
+↓
+
+Persist Execution Request
+
+↓
+
+Return HTTP 202 Accepted
+
+↓
+
+Queue
+
+↓
+
+Worker
+
+↓
+
+Workspace Preparation
+
+↓
+
+CapabilityComposition
+
+↓
+
+RuntimeHost.execute()
+
+↓
+
+Publish Results
+
+The queue implementation is intentionally outside the Runtime architecture.
+
+Hosts may use:
+
+- in-memory queues;
+- cloud messaging systems;
+- task schedulers;
+- background workers;
+- event buses;
+
+without affecting Runtime behavior.
+
+---
+
+## Responsibilities
+
+### Runtime
+
+Responsible only for:
+
+- planning;
+- execution;
+- artifact routing;
+- capability resolution.
+
+The Runtime remains unaware of:
+
+- queues;
+- retries;
+- workers;
+- scheduling;
+- delivery acknowledgements.
+
+---
+
+### Host
+
+Responsible for:
+
+- receiving provider events;
+- acknowledging requests;
+- deduplicating deliveries if necessary;
+- scheduling execution;
+- invoking RuntimeHost.execute();
+- publishing workflow results.
+
+---
+
+### Worker
+
+Responsible for:
+
+- obtaining scheduled executions;
+- preparing infrastructure;
+- creating CapabilityComposition;
+- executing RuntimeHost;
+- reporting failures.
+
+Workers remain Host infrastructure.
+
+---
+
+## Consequences
+
+### Advantages
+
+- Fast webhook acknowledgement.
+- Better production reliability.
+- Improved scalability.
+- Horizontal execution.
+- Retry support.
+- Independent execution lifetime.
+- Multiple concurrent Engineering Workflows.
+
+### Trade-offs
+
+- Increased operational complexity.
+- Queue infrastructure required.
+- Worker deployment required.
+- Eventual consistency between webhook reception and published results.
+- Execution monitoring becomes necessary.
+
+---
+
+## Validation
+
+The synchronous GitHub Runtime Host implemented in Epic 11 validates the Runtime architecture and serves as the reference implementation.
+
+Future production deployments may introduce asynchronous execution without modifying:
+
+- Runtime Execution Core;
+- Planner;
+- Execution Engine;
+- Workflows;
+- Artifacts;
+- Capabilities;
+- Runtime Host SPI.
+
+Only Host infrastructure changes.
+
+This confirms that execution scheduling is an operational concern rather than a Runtime concern.

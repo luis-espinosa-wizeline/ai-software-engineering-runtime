@@ -13,7 +13,7 @@ ExecutionEngine
 CapabilityRequest
        |
        v
-  Capability
+CapabilityImplementation
        |
        v
 CapabilityResult
@@ -31,25 +31,34 @@ capability, stores those artifacts in the execution context.
 
 ## Capability
 
-A `Capability` is an executable implementation of one declared Action Contract.
-Its interface identifies that Action Contract and transforms a
-`CapabilityRequest` into a `CapabilityResult`.
+A `Capability` is an immutable, provider-neutral description of WHAT
+transformation may be requested. Its `contract` identifies that transformation.
+It has no execution method, provider, configuration, or implementation logic.
 
-Capabilities are pure units of work at the Runtime boundary. They receive fully
-prepared input values and return artifacts. They do not resolve workflow
-references, navigate a plan, or mutate runtime state.
+## Capability Implementation
 
-A capability never receives or knows a `WorkflowDefinition`, `ExecutionPlan`,
-`ExecutionContext`, `ExecutionEngine`, or other Runtime internals. Conversely,
-the Runtime contract contains no provider, OpenAI, Ollama, HTTP, SDK, or
-infrastructure concept.
+A `CapabilityImplementation` defines HOW one Capability is performed. The
+structural protocol exposes its Capability and transforms a `CapabilityRequest`
+into a `CapabilityResult`. Implementations receive named input artifacts and
+produce output artifacts.
+
+An implementation never receives or knows a `WorkflowDefinition`,
+`ExecutionPlan`, `ExecutionContext`, `ExecutionEngine`, or other Runtime
+internals. The engine owns context access and mutation. This preserves minimum
+knowledge while still providing the implementation all resolved data needed for
+one invocation.
+
+An implementation may privately use a provider such as a filesystem, model API,
+container runtime, or remote service. Providers are WITH WHAT the transformation
+is performed. They are intentionally absent from every Runtime contract, so
+provider technology can change without affecting planning or execution.
 
 ## Capability Request
 
 A `CapabilityRequest` contains:
 
-- the provider-neutral Action Contract to perform; and
-- fully resolved input values.
+- the provider-neutral `Capability` to perform; and
+- fully resolved, uniquely named input artifacts.
 
 It contains no plan bindings, workflow references, execution context, execution
 plan, or other Runtime objects. Preparing this message is an `ExecutionEngine`
@@ -62,6 +71,11 @@ Artifacts are transported unchanged across the execution boundary. The result
 does not contain status, retries, metrics, duration, token usage, provider
 metadata, timestamps, or errors.
 
-Capability lookup uses the provider-neutral `CapabilityResolver` contract.
-Provider selection, scheduling, retries, telemetry, and persistence remain
-outside these contracts.
+Capability implementation lookup uses the provider-neutral `CapabilityResolver`
+contract. The current resolver allows exactly one implementation per contract.
+The protocol permits different implementation classes, but selection among
+multiple implementations, provider selection, scheduling, retries, telemetry,
+and persistence remain outside these contracts.
+
+`IdentityCapabilityImplementation` is the minimal working example. It reads a
+`value` artifact and produces a `result` artifact without any provider.

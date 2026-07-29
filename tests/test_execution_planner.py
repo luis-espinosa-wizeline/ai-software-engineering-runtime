@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.execution import (
     ExecutionPlanConstructionError,
@@ -11,11 +12,18 @@ from app.execution import (
 from app.workflows import (
     WorkflowDefinition,
     WorkflowInputBinding,
+    WorkflowInputDefinition,
     WorkflowInputReference,
+    WorkflowInputType,
+    WorkflowIteration,
     WorkflowResultReference,
     WorkflowStepDefinition,
     WorkflowStepOutputReference,
 )
+
+
+def workflow_input(name: str) -> WorkflowInputDefinition:
+    return WorkflowInputDefinition(name=name, type=WorkflowInputType.STRING)
 
 
 def review_workflow() -> WorkflowDefinition:
@@ -23,7 +31,7 @@ def review_workflow() -> WorkflowDefinition:
         workflow_id="pull-request-review",
         name="Pull request review",
         version="1",
-        required_inputs=("repository", "pull_request"),
+        inputs=(workflow_input("repository"), workflow_input("pull_request")),
         steps=(
             WorkflowStepDefinition(
                 step_id="retrieve-changes",
@@ -89,6 +97,36 @@ def test_planner_compiles_workflow_intent_into_an_execution_plan() -> None:
     assert plan.result.output_name == "review"
 
 
+def test_planner_preserves_iteration_pattern() -> None:
+    workflow = WorkflowDefinition(
+        workflow_id="iterate",
+        name="Iterate",
+        version="1",
+        inputs=(workflow_input("items"),),
+        steps=(
+            WorkflowStepDefinition(
+                step_id="transform",
+                name="Transform",
+                action_contract="Transform",
+                input_bindings=(
+                    WorkflowInputBinding(
+                        parameter="item",
+                        source=WorkflowInputReference(input_name="items"),
+                    ),
+                ),
+                outputs=("result",),
+                iteration=WorkflowIteration(input_parameter="item"),
+            ),
+        ),
+        result=WorkflowResultReference(step_id="transform", output_name="result"),
+    )
+
+    plan = ExecutionPlanner().plan(workflow)
+
+    assert plan.steps[0].iteration is not None
+    assert plan.steps[0].iteration.input_parameter == "item"
+
+
 def test_planning_is_deterministic_and_does_not_modify_the_workflow() -> None:
     workflow = review_workflow()
     original = workflow.model_dump()
@@ -150,7 +188,7 @@ def test_planner_rejects_invalid_workflow_definitions(
         ExecutionPlanner().plan(workflow)
 
 
-def test_planner_rejects_duplicate_steps_inputs_outputs_and_parameters() -> None:
+def test_planner_rejects_duplicate_steps_outputs_and_parameters() -> None:
     step = WorkflowStepDefinition(
         step_id="same",
         name="Same",
@@ -171,12 +209,55 @@ def test_planner_rejects_duplicate_steps_inputs_outputs_and_parameters() -> None
         workflow_id="duplicates",
         name="Duplicates",
         version="1",
-        required_inputs=("input", "input"),
+        inputs=(workflow_input("input"),),
         steps=(step, step),
         result=WorkflowResultReference(step_id="same", output_name="result"),
     )
 
     with pytest.raises(InvalidWorkflowForPlanning, match="duplicate step"):
+        ExecutionPlanner().plan(workflow)
+
+
+def test_workflow_definition_rejects_duplicate_input_names() -> None:
+    with pytest.raises(ValidationError, match="input names must be unique"):
+        WorkflowDefinition(
+            workflow_id="duplicates",
+            name="Duplicates",
+            version="1",
+            inputs=(workflow_input("input"), workflow_input("input")),
+        )
+
+
+def test_planner_rejects_optional_inputs_bound_without_absence_semantics() -> None:
+    workflow = WorkflowDefinition(
+        workflow_id="optional-binding",
+        name="Optional binding",
+        version="1",
+        inputs=(
+            WorkflowInputDefinition(
+                name="optional",
+                type=WorkflowInputType.STRING,
+                required=False,
+            ),
+        ),
+        steps=(
+            WorkflowStepDefinition(
+                step_id="consume",
+                name="Consume",
+                action_contract="Consume",
+                input_bindings=(
+                    WorkflowInputBinding(
+                        parameter="value",
+                        source=WorkflowInputReference(input_name="optional"),
+                    ),
+                ),
+                outputs=("result",),
+            ),
+        ),
+        result=WorkflowResultReference(step_id="consume", output_name="result"),
+    )
+
+    with pytest.raises(InvalidWorkflowForPlanning, match="optional workflow input"):
         ExecutionPlanner().plan(workflow)
 
 
@@ -202,7 +283,7 @@ def test_planner_rejects_invalid_internal_references(
         workflow_id="invalid-reference",
         name="Invalid reference",
         version="1",
-        required_inputs=("declared",),
+        inputs=(workflow_input("declared"),),
         steps=(
             WorkflowStepDefinition(
                 step_id="produce",

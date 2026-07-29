@@ -1,52 +1,72 @@
-# ADR-002: Frozen Runtime Architecture
+# ADR-002 — Frozen Runtime Architecture
 
 ## Status
 
 Accepted
 
+Validated by Epics 8.5–9
+
 ## Context
 
-The Runtime has reached its first stable architectural milestone. Its core domain
-boundaries need to remain consistent while implementation work proceeds. Repeated
-changes to those boundaries would make integrations, workflows, and supporting
-infrastructure depend on a moving domain model.
+The Runtime is responsible for deterministic workflow execution.
 
-Implementation details will continue to evolve as the Runtime is built. That
-evolution must not implicitly redesign the established architecture.
+As Engineering capabilities evolve, new requirements will inevitably emerge. The primary architectural concern is preventing business responsibilities from leaking into the Runtime.
+
+A stable execution core should evolve only when a workflow requires genuinely new execution semantics.
 
 ## Decision
 
-The Runtime architecture is intentionally frozen around these concepts:
+The Runtime architecture is considered frozen.
 
-- `Runtime`;
-- `Trigger`;
-- `TriggerEvent`;
-- `WorkflowDefinition`;
-- `WorkflowExecution`;
-- `ExecutionContext`;
-- `Capability`;
-- `CapabilityProvider`;
-- `Policy`; and
-- `Publisher`.
+Its responsibilities are limited to:
 
-The domain model and the responsibilities represented by these concepts remain
-stable. Implementations, adapters, and other technical details may evolve without
-changing those architectural boundaries.
+- Workflow discovery
+- Workflow planning
+- Deterministic execution
+- Execution Patterns
+- Artifact routing
+- Execution Context management
+- Capability resolution
 
-`WorkflowExecution` remains the Runtime Aggregate Root as established by
-[ADR-001](001-workflow-execution-aggregate-root.md).
+Business logic belongs exclusively to Capabilities.
 
-The single explicit exception is `CapabilityResolver`. Its design remains
-intentionally undecided until Agent Kit integration is fully understood.
-`CapabilityResolver` is the only architectural component still under evaluation.
+Engineering concepts belong exclusively to Artifacts.
+
+The Runtime must evolve only when a workflow demonstrates the need for a fundamentally new execution semantic (for example, Iteration, Parallel Execution, Conditional Execution, or Retry).
+
+## Validation
+
+This decision was validated during the implementation of the first end-to-end Engineering Workflow.
+
+The following evolution occurred:
+
+- Epic 8.5 introduced the Iteration execution pattern.
+- Epic 8.6 introduced Engineering Knowledge Aggregation as a Capability.
+- Epic 8.7 evolved the EngineeringFinding domain model to preserve provenance.
+- Epic 9 composed the complete Engineering workflow.
+
+After Iteration was introduced, no additional Runtime responsibilities were required.
+
+Subsequent epics extended:
+
+- Capabilities,
+- Artifacts,
+- Workflow definitions,
+- Documentation,
+- Integration tests,
+
+without modifying the Execution Engine, Planner, Artifact routing, or Capability contracts.
+
+This demonstrates that execution semantics and Engineering semantics are correctly separated.
 
 ## Consequences
 
-- Runtime implementation can advance against stable domain boundaries.
-- Architectural changes require an explicit decision rather than emerging from
-  implementation details.
-- Adapters and infrastructure may evolve independently of the stable domain model.
-- Work involving `CapabilityResolver` must avoid treating an interim design as a
-  settled architectural decision.
-- No other established Runtime concept is reopened by the `CapabilityResolver`
-  exception.
+Future development should default to:
+
+- new Capabilities,
+- richer Artifacts,
+- additional Workflows.
+
+The Runtime should evolve only when new orchestration semantics are required.
+
+Execution semantics should never be extended simply to accommodate business behavior.

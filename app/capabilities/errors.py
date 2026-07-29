@@ -13,7 +13,7 @@ class MissingCapability(CapabilityResolutionError):
 
 
 class DuplicateCapability(CapabilityResolutionError):
-    """Raised when multiple capabilities implement the same Action Contract."""
+    """Raised when multiple implementations realize the same Action Contract."""
 
     def __init__(self, action_contract: str) -> None:
         super().__init__(f"Multiple capabilities implement Action Contract {action_contract!r}")

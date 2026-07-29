@@ -1,0 +1,16 @@
+name: MergeEngineeringFindings
+description: Merge an ordered collection of engineering findings into one EngineeringFindings artifact.
+category: analysis
+contract: MergeEngineeringFindings
+version: "1"
+inputs:
+  - name: engineering_findings
+    description: Ordered collection of EngineeringFindings payloads.
+outputs:
+  - name: engineering_findings
+    description: Unified EngineeringFindings payload.
+tags:
+  - analysis
+  - engineering-knowledge
+  - aggregation
+entrypoint: app.capabilities.merge_engineering_findings.implementation

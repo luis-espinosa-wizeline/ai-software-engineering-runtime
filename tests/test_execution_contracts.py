@@ -3,60 +3,84 @@ from typing import assert_type
 import pytest
 from pydantic import ValidationError
 
-from app.capabilities import Capability, CapabilityRequest, CapabilityResult
-from app.execution import Artifact
+from app.capabilities import (
+    Artifact,
+    Capability,
+    CapabilityImplementation,
+    CapabilityRequest,
+    CapabilityResult,
+)
+from app.capabilities.identity import IdentityCapabilityImplementation
+from tests.capability_fixtures import capability
 
 
-class ReviewCapability:
-    """Minimal executable used to verify the structural capability contract."""
+class ReviewImplementation:
+    """Minimal executable used to verify the structural implementation contract."""
 
     @property
-    def action_contract(self) -> str:
-        return "code.review"
+    def capability(self) -> Capability:
+        return capability("code.review")
 
     def execute(self, request: CapabilityRequest) -> CapabilityResult:
-        repository = request.inputs["repository"]
+        repository = request.artifact("repository")
         return CapabilityResult(
             artifacts=(
                 Artifact(
                     name="review",
-                    payload={"repository": repository, "approved": True},
+                    payload={"repository": repository.payload, "approved": True},
                 ),
             )
         )
 
 
-def accepts_capability(capability: Capability) -> Capability:
-    return capability
-
-
 class MissingExecute:
     @property
-    def action_contract(self) -> str:
-        return "code.review"
+    def capability(self) -> Capability:
+        return capability("code.review")
 
 
-def test_capability_request_contains_only_contract_and_resolved_inputs() -> None:
+def accepts_implementation(
+    implementation: CapabilityImplementation,
+) -> CapabilityImplementation:
+    return implementation
+
+
+def test_capability_defines_what_without_execution_behavior() -> None:
+    value = capability("code.review")
+
+    assert value.contract == "code.review"
+    assert value.name == "code.review"
+    assert not hasattr(value, "execute")
+    with pytest.raises(ValidationError):
+        value.contract = "changed"
+
+
+def test_capability_request_contains_only_capability_and_input_artifacts() -> None:
+    repository = Artifact(name="repository", payload="example/runtime")
+    changes = Artifact(name="changes", payload={"files": ["app/main.py"]})
     request = CapabilityRequest(
-        action_contract="code.review",
-        inputs={
-            "repository": "example/runtime",
-            "changes": {"files": ["app/main.py"]},
-        },
+        capability=capability("code.review"),
+        artifacts=(repository, changes),
     )
 
-    assert request.action_contract == "code.review"
-    assert request.inputs == {
-        "repository": "example/runtime",
-        "changes": {"files": ["app/main.py"]},
-    }
-    assert request.model_dump() == {
-        "action_contract": "code.review",
-        "inputs": {
-            "repository": "example/runtime",
-            "changes": {"files": ["app/main.py"]},
-        },
-    }
+    assert request.artifacts == (repository, changes)
+    assert request.artifact("repository") is repository
+    assert set(request.model_dump()) == {"capability", "artifacts"}
+
+
+def test_capability_request_requires_unique_named_input_artifacts() -> None:
+    with pytest.raises(ValidationError, match="names must be unique"):
+        CapabilityRequest(
+            capability=capability("example"),
+            artifacts=(
+                Artifact(name="value", payload=1),
+                Artifact(name="value", payload=2),
+            ),
+        )
+
+    request = CapabilityRequest(capability=capability("example"))
+    with pytest.raises(ValueError, match="was not provided"):
+        request.artifact("missing")
 
 
 def test_capability_result_transports_one_or_more_artifacts() -> None:
@@ -66,67 +90,63 @@ def test_capability_result_transports_one_or_more_artifacts() -> None:
     result = CapabilityResult(artifacts=(review, summary))
 
     assert result.artifacts == (review, summary)
-    assert result.artifacts[0] is review
-    assert result.artifacts[1] is summary
-
-
-def test_capability_result_requires_an_artifact() -> None:
     with pytest.raises(ValidationError):
         CapabilityResult(artifacts=())
 
 
 def test_execution_contracts_are_immutable_and_strict() -> None:
-    request = CapabilityRequest(action_contract="code.review")
+    value = capability("code.review")
+    request = CapabilityRequest(capability=value)
     result = CapabilityResult(artifacts=(Artifact(name="review", payload="Approved"),))
 
     with pytest.raises(ValidationError):
-        request.action_contract = "changed"
-
+        request.artifacts = ()
     with pytest.raises(ValidationError):
         result.artifacts = ()
-
     with pytest.raises(ValidationError):
         CapabilityRequest(
-            action_contract="code.review",
-            inputs={},
+            capability=value,
+            artifacts=(),
             execution_context={},
         )  # type: ignore[call-arg]
-
     with pytest.raises(ValidationError):
         CapabilityResult(
             artifacts=result.artifacts,
-            status="succeeded",
+            provider="openai",
         )  # type: ignore[call-arg]
 
 
-@pytest.mark.parametrize("action_contract", ["", "code/review", ".code-review"])
-def test_action_contract_must_be_a_valid_provider_neutral_identifier(
-    action_contract: str,
-) -> None:
+@pytest.mark.parametrize("contract", ["", "code/review", ".code-review"])
+def test_capability_contract_must_be_provider_neutral_identifier(contract: str) -> None:
     with pytest.raises(ValidationError):
-        CapabilityRequest(action_contract=action_contract)
+        capability(contract)
 
 
-def test_capability_contract_transforms_request_into_artifacts() -> None:
-    capability = accepts_capability(ReviewCapability())
-    assert_type(capability, Capability)
-    assert isinstance(ReviewCapability(), Capability)
-    assert not isinstance(MissingExecute(), Capability)
+def test_implementation_contract_transforms_artifacts_into_artifacts() -> None:
+    implementation = accepts_implementation(ReviewImplementation())
+    assert_type(implementation, CapabilityImplementation)
+    assert isinstance(ReviewImplementation(), CapabilityImplementation)
+    assert not isinstance(MissingExecute(), CapabilityImplementation)
     request = CapabilityRequest(
-        action_contract=capability.action_contract,
-        inputs={"repository": "example/runtime"},
+        capability=implementation.capability,
+        artifacts=(Artifact(name="repository", payload="example/runtime"),),
     )
 
-    result = capability.execute(request)
+    result = implementation.execute(request)
 
-    assert result == CapabilityResult(
-        artifacts=(
-            Artifact(
-                name="review",
-                payload={
-                    "repository": "example/runtime",
-                    "approved": True,
-                },
-            ),
-        )
+    assert result.artifacts[0].payload == {
+        "repository": "example/runtime",
+        "approved": True,
+    }
+
+
+def test_identity_implementation_provides_minimal_working_execution() -> None:
+    implementation = IdentityCapabilityImplementation()
+    request = CapabilityRequest(
+        capability=implementation.capability,
+        artifacts=(Artifact(name="value", payload={"answer": 42}),),
+    )
+
+    assert implementation.execute(request) == CapabilityResult(
+        artifacts=(Artifact(name="result", payload={"answer": 42}),)
     )

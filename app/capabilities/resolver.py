@@ -5,30 +5,31 @@ from types import MappingProxyType
 from typing import Protocol
 
 from app.capabilities.errors import DuplicateCapability, MissingCapability
-from app.capabilities.models import Capability
+from app.capabilities.models import CapabilityImplementation
 
 
 class CapabilityResolver(Protocol):
-    """Resolve executable capabilities by declared Action Contract."""
+    """Resolve capability implementations by declared Action Contract."""
 
-    def resolve(self, action_contract: str) -> Capability:
-        """Return the capability implementing an Action Contract."""
+    def resolve(self, action_contract: str) -> CapabilityImplementation:
+        """Return the implementation realizing an Action Contract."""
         ...
 
 
 class InMemoryCapabilityResolver:
-    """Resolve a deterministic snapshot of capabilities by Action Contract."""
+    """Resolve a deterministic snapshot of implementations by Action Contract."""
 
-    def __init__(self, capabilities: Iterable[Capability]) -> None:
-        by_action_contract: dict[str, Capability] = {}
-        for capability in capabilities:
-            if capability.action_contract in by_action_contract:
-                raise DuplicateCapability(capability.action_contract)
-            by_action_contract[capability.action_contract] = capability
+    def __init__(self, implementations: Iterable[CapabilityImplementation]) -> None:
+        by_action_contract: dict[str, CapabilityImplementation] = {}
+        for implementation in implementations:
+            contract = implementation.capability.contract
+            if contract in by_action_contract:
+                raise DuplicateCapability(contract)
+            by_action_contract[contract] = implementation
         self._by_action_contract = MappingProxyType(by_action_contract)
 
-    def resolve(self, action_contract: str) -> Capability:
-        """Return the capability implementing an Action Contract."""
+    def resolve(self, action_contract: str) -> CapabilityImplementation:
+        """Return the implementation realizing an Action Contract."""
         try:
             return self._by_action_contract[action_contract]
         except KeyError as error:
